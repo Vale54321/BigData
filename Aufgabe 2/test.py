@@ -28,23 +28,25 @@ def catalan_list(n: int) -> List[int]:
 
 
 def read_adsb_lonlat_by_aircraft(path: str) -> Dict[str, Tuple[List[float], List[float]]]:
-    flights: Dict[str, Tuple[List[float], List[float]]] = {}
+    flights = {}
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
-            parts = line.strip().split()
+            raw = line.strip()
+            if not raw:
+                continue
+            # CSV mit Kommas bevorzugen, sonst whitespace
+            parts = [p.strip() for p in raw.split(",")] if "," in raw else raw.split()
             if len(parts) < 6:
                 continue
             ac_id = parts[0]
-            # parts[4] = lat, parts[5] = lon (laut Aufgabenbeschreibung)
             try:
                 lat = float(parts[4])
                 lon = float(parts[5])
             except ValueError:
                 continue
-            if ac_id not in flights:
-                flights[ac_id] = ([], [])
-            flights[ac_id][0].append(lon)
-            flights[ac_id][1].append(lat)
+            lons, lats = flights.setdefault(ac_id, ([], []))
+            lons.append(lon)
+            lats.append(lat)
     return flights
 
 
