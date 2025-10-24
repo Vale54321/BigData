@@ -34,7 +34,6 @@ def read_adsb_lonlat_by_aircraft(path: str) -> Dict[str, Tuple[List[float], List
             raw = line.strip()
             if not raw:
                 continue
-            # CSV mit Kommas bevorzugen, sonst whitespace
             parts = [p.strip() for p in raw.split(",")] if "," in raw else raw.split()
             if len(parts) < 6:
                 continue
@@ -183,7 +182,7 @@ def aufgabe2_j(path_adsb: str = "adsbprak.txt",
         if not flights:
             print(f"Keine gültigen Daten in: {p}")
             return
-        # Kombinierter Plot: Linie + Punkte
+
         plt.figure()
         for ac_id, (lons, lats) in flights.items():
             plt.plot(lons, lats, linewidth=1.0)
@@ -196,24 +195,17 @@ def aufgabe2_j(path_adsb: str = "adsbprak.txt",
         plt.tight_layout()
         plt.show()
 
-    # Datei 1
     try:
         plot_file(path_adsb)
     except FileNotFoundError:
-        print(f"Datei nicht gefunden: {path_adsb}  bitte Pfad prüfen.")
+        print(f"Datei nicht gefunden: {path_adsb}")
 
-    # Datei 2
     try:
         plot_file(path_adsb2)
     except FileNotFoundError:
-        print(f"Datei nicht gefunden: {path_adsb2}  bitte Pfad prüfen.")
+        print(f"Datei nicht gefunden: {path_adsb2}")
 
-
-# ------------------------------
-# Bequemer Gesamtaufruf
-# ------------------------------
-
-def run_all() -> None:
+if __name__ == "__main__":
     aufgabe2_a()
     print()
     aufgabe2_b()
@@ -231,10 +223,5 @@ def run_all() -> None:
     aufgabe2_h()
     print()
     aufgabe2_i()
-    # Pfade ggf. anpassen, falls du lokal testest
+    print()
     aufgabe2_j()
-
-
-if __name__ == "__main__":
-    # In Spyder kannst du alternativ einzelne Funktionen mit F9 ausführen.
-    run_all()
