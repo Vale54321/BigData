@@ -80,7 +80,7 @@ plt.ylabel('1/x')
 plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.close()
+plt.show()
 
 #--------------------------------Aufgabe e----------------------------------
 product_rd2 = rd2.fold(1, lambda a, b: a * b)
