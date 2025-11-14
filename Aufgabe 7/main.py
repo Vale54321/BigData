@@ -1,5 +1,7 @@
-def readAllLanguages(scone, lang_file):
-    return (scone.textFile(lang_file)
+from sparkstart import scon, spark
+
+def readAllLanguages(scon, lang_file):
+    return (scon.textFile(lang_file)
               .map(lambda line: line.strip().split(","))
               .filter(lambda x: len(x) == 2)
               .map(lambda x: (x[1].lower(), x[0].lower())))
@@ -57,9 +59,6 @@ def count_texts_per_language(lang_detected_rdd):
 
 
 def detect_languages(scon, text_dir, lang_file, partitions=1000):
-    """
-    detect_languages(scon, "/data/texte/txt", "/data/texte/languages.txt")
-    """
     import time
     
     start_time = time.time()
@@ -90,3 +89,11 @@ def detect_languages(scon, text_dir, lang_file, partitions=1000):
     print("\nGesamtanzahl Texte pro Sprache:")
     for lang, count in summary:
         print(f"{lang}: {count}")
+
+def main(scon, spark):
+    detect_languages(scon,
+                     text_dir="/data/texte/txt",
+                     lang_file="/data/texte/languages.txt",)
+
+if __name__ == "__main__":
+    main(scon, spark)

@@ -1,3 +1,5 @@
+from sparkstart import scon, spark
+
 def a(scon, spark, path):
     rdd = scon.textFile(path)
     return rdd
@@ -49,11 +51,11 @@ def e(scon,spark, path, top_n=20):
     return d(rdd, top_n)
 
 def main(scon, spark):
-    """
-    main(scon, spark)
-    """
     rdd = a(scon, spark, "/data/texte/test/robinsonCrusoe.txt")
     b(rdd)
     c(rdd)
     d(rdd)
     e(scon, spark, "/data/texte/test/DonQuijote.txt")
+
+if __name__ == "__main__":
+    main(scon, spark)
