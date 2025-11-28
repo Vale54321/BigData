@@ -133,7 +133,7 @@ def plot_avg_tmax_day(station_name):
 
     days = [row['day'] for row in df_avg]
     avg_tmax = [row['avg_tmax'] for row in df_avg]
-
+    #TODO: Mit SQL machen
     # 21-Tage gleitender Durchschnitt (10 Tage davor, Tag selbst, 10 Tage danach)
     rolling_avg = []
     for i in range(len(avg_tmax)):
