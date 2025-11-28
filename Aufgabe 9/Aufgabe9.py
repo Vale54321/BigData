@@ -1,144 +1,167 @@
 from sparkstart import scon, spark
+from pyspark import SparkContext, rdd
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType
+from pyspark.sql.types import StructField
+from pyspark.sql.types import StringType
+from pyspark.sql.types import FloatType
+from pyspark.sql.types import IntegerType
 
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, FloatType
-from pyspark.sql import Row
-import pyspark.sql.functions as F
-import re
+import matplotlib.pyplot as plt 
 
-CDC_PATH = "/data/cdc/hourly/"
-HDFS_HOME = "hdfs://193.174.205.250:54310/"
+HDFSPATH = "hdfs://193.174.205.250:54310/"
+GHCNDPATH = HDFSPATH + "ghcnd/"
+GHCNDHOMEPATH = "/data/ghcnd/"
 
 
-# a) Stationsdaten einlesen & als Parquet speichern
-def a(scon, spark, path=CDC_PATH):
-    stationlines = scon.textFile(path + "TU_Stundenwerte_Beschreibung_Stationen.txt")
+# Aufgabe 9 a
 
-    stationlines = stationlines.zipWithIndex().filter(lambda x: x[1] >= 2).map(lambda x: x[0])
-
-    stationsplitlines = stationlines.map(lambda l: (
-        l[0:5].strip(),
-        l[6:14].strip(),
-        l[15:23].strip(), 
-        int(l[24:41].strip()),
-        float(l[42:52].strip()),
-        float(l[53:61].strip()), 
-        l[61:101].strip(), 
-        l[102:].strip()
-    ))
+def import_data(spark: SparkSession, scon: SparkContext):
+    """
+    %time import_data(spark, scon)
+    """
     
-    stationschema = StructType([
-        StructField('stationid', StringType(), True),
-        StructField('from_date', StringType(), True),
-        StructField('to_date', StringType(), True),
-        StructField('height', IntegerType(), True),
-        StructField('latitude', FloatType(), True),
-        StructField('longitude', FloatType(), True),
-        StructField('stationname', StringType(), True),
-        StructField('state', StringType(), True)
-    ])
-
-    stationframe = spark.createDataFrame(stationsplitlines, schema=stationschema)
-
-    stationframe.createOrReplaceTempView("cdc_stations")
-
-    outfile = HDFS_HOME + "/home/kramlingermike/" + "cdc_stations.parquet"
-    stationframe.write.mode('overwrite').parquet(outfile)
-    stationframe.cache()
-
-# a) Beispielabfrage
-def get_all_cdc_stations(spark):
-    result = spark.sql(f"""
-        SELECT *
-        FROM cdc_stations
-        ORDER BY stationname
-    """)
-    result.show(truncate=False)
-
-# a) Beispielabfrage
-def get_cdc_stations_per_state(spark):
-    result = spark.sql(f"""
-        SELECT
-            state,
-            COUNT(*) AS count
-        FROM cdc_stations
-        GROUP BY state
-        ORDER BY count DESC
-    """)
-    result.show(truncate=False)
-
-def b(scon, spark):
-    lines = scon.textFile(CDC_PATH + "produkt*")
+    # Daten in RDD einlesen
+    rdd_station = scon.textFile("/data/cdc/hourly/TU_Stundenwerte_Beschreibung_Stationen.txt")
     
-    lines = lines.filter(lambda line: not line.startswith("STATIONS_ID"))
-    lines = lines.zipWithIndex().filter(lambda x: x[1] >= 0).map(lambda x: x[0])
-
-    lines = lines.map(lambda l: l.split(";"))
-    
-    lines = lines.map(lambda s: (
-    s[0].strip(),
-    s[1].strip()[:8],  
-    int(s[1].strip()[8:]),
-    int(s[2].strip()),
-    float(s[3].strip()),
-    float(s[4].strip())
-    ))
-    
-    schema = StructType([
-    StructField("stationid", StringType(), True),
-    StructField("date", StringType(), True),
-    StructField("hour", IntegerType(), True),
-    StructField("qn_9", IntegerType(), True),
-    StructField("tt_tu", FloatType(), True),
-    StructField("rf_tu", FloatType(), True)
-    ])
-    
-
-    df = spark.createDataFrame(lines, schema)
-
-    df.createOrReplaceTempView("cdc_hourly")
-
-    outfile = HDFS_HOME + "home/kramlingermike/" + "cdc_hourly.parquet"
-    df.write.mode("overwrite").parquet(outfile)
-    
-def get_hourly_station(spark, stationid, limit=20):
-    result = spark.sql(f"""
-        SELECT *
-        FROM cdc_hourly
-        WHERE stationid = '{stationid}'
-        ORDER BY date, hour
-        LIMIT {limit}
-    """)
-    result.show(truncate=False)
-    
-def avg_temp_per_day(spark, stationid, limit=20):
-    result = spark.sql(f"""
-        SELECT date, ROUND(AVG(tt_tu),2) AS avg_temp
-        FROM cdc_hourly
-        WHERE stationid = '{stationid}'
-        GROUP BY date
-        ORDER BY date
-        LIMIT {limit}
-    """)
-    result.show(truncate=False)
+    # Entfernen der ersten beiden Zeilen (Header und Trennzeile)
+    rdd_station_filterd = (rdd_station
+                           .zipWithIndex() # jede Zeile bekommt idx
+                           .filter(lambda x: x[1] >= 2) # nur Zeilen mit idx >= 2 behalten
+                           .map(lambda x: x[0])) # idx wieder entfernen
 
     
+    rdd_station_splitlines = rdd_station_filterd.map(
+        lambda l: (
+            int(l[:6].strip()),              # Station ID
+            l[6:15],                    # von_datum
+            l[15:24],                   # bis_datum
+            float(l[24:40].strip()),    # stations höhe
+            float(l[40:53].strip()),    # geoBreite
+            float(l[53:61].strip()),    # geoHöhe
+            l[61:142],                  # Stationsname
+            l[142:-1]                  # Bundesland
+            ))
+    
+    # Datenschema festlegen
+    stationschema = StructType(
+        [
+            StructField("stationId", IntegerType(), True),
+            StructField("von_datum", StringType(), True),
+            StructField("bis_datum", StringType(), True),
+            StructField("hoehe", FloatType(), True),
+            StructField("geo_breite", FloatType(), True),
+            StructField("geo_laenge", FloatType(), True),
+            StructField("station_name", StringType(), True),
+            StructField("bundesland", StringType(), True)
+        ]
+    )
+    
+    # Data Frame erzeugen
+    stationframe = spark.createDataFrame(rdd_station_splitlines, schema=stationschema)
+    stationframe.printSchema()
+    
+    # Temporäre View erzeugen
+    stationframe.createOrReplaceTempView("german_stations")
+    
+    # Data Frame in HDFS speichern
+    stationframe.write.mode("overwrite").parquet(
+        HDFSPATH + "home/heiserervalentin/german_stations.parquet"
+        )
+    
+   
+    
+def read_data_from_parquet(spark):
+    """
+    read_data_from_parquet(spark)
+    """
+    df = spark.read.parquet(HDFSPATH + "home/heiserervalentin/german_stations.parquet")
+    df.createOrReplaceTempView("german_stations")
+    df.cache()
+    
+def sql_querys(spark):
+    """
+    sql_querys(spark)
+    """
+    spark.sql("SELECT * FROM german_stations").show(5, truncate=False)
+    spark.sql("SELECT COUNT(*) AS Anzahl FROM german_stations").show()
+    spark.sql("SELECT MAX(geo_breite) FROM german_stations").show()
+    df = spark.sql("SELECT * FROM german_stations").toPandas()
+    
+    plt.figure(figsize=[6,6])
+    plt.scatter(df.geo_laenge, df.geo_breite, marker='.', color = 'r')
+    
+    plt.show()
+
+
+def import_produkt_files(spark: SparkSession, scon: SparkContext, path='/data/cdc/hourly/'): 
+    """
+    import_produkt_files(spark, scon)
+    """
+    
+    # Daten in RDD einlesen
+    rdd_produkt = scon.textFile(f"{path}/produkt*")  
+    
+    # Kopfzeile und Leerzeichen filtern
+    rdd_filterd = rdd_produkt \
+                    .filter(lambda l: l != 'STATIONS_ID;MESS_DATUM;QN_9;TT_TU;RF_TU;eor') \
+                    .map(lambda l: [x.strip() for x in l.split(';')])
+    
+    # Zeilen in Felder aufteilen
+    rdd_produkt_splitlines = rdd_filterd.map(
+        lambda l: (
+            int(l[0]),                        # Stat_id
+            l[1][:8],                    # Messdatum
+            int(l[1][8:10]),             # Messstunde
+            int(l[2]),                   # Qualitätsniveau 
+            float(l[3]),                 # Lufttemp.
+            float(l[4]),                 # rel. Luftfeuchte
+            int(l[1][0:4])               # jahr
+            )
+        )
+    
+    print(rdd_produkt_splitlines.take(5))
+    
+    # Datenschema definieren
+    product_schema = StructType(
+        [
+            StructField("stationId", IntegerType(), True),
+            StructField("date", StringType(), True),
+            StructField("hour", IntegerType(), True),
+            StructField("QN_9", IntegerType(), True),
+            StructField("TT_TU", FloatType(), True),
+            StructField("RF_TU", FloatType(), True),
+            StructField("jahr", IntegerType(), True)
+        ]
+    )
+    
+    product_frame = spark.createDataFrame(rdd_produkt_splitlines, schema=product_schema)
+    product_frame.printSchema()
+    product_frame.createOrReplaceTempView("german_stations_data")
+    
+
+    product_frame.write.mode("overwrite").parquet(
+        HDFSPATH + "home/heiserervalentin/german_stations_data.parquet"
+        )
+    
+   
+    
+def read_product_data_from_parquet(spark):
+    """
+    read_product_data_from_parquet(spark)
+    """
+    df = spark.read.parquet(HDFSPATH + "home/heiserervalentin/german_stations_data.parquet")
+    df.createOrReplaceTempView("german_stations_data")
+    df.cache()
+
 def main(scon, spark):
-    """
-    main(scon, spark)
-    """
+    # Daten importieren
+    import_data(spark, scon)
+    read_data_from_parquet(spark)
+    sql_querys(spark)
     
-    print("a)")
-    a(scon, spark)
-    print("Beispielabfrage: (Alle Stationen:)")
-    get_all_cdc_stations(spark)
-    print("Beispielabfrage: (Alle Stationen pro Bundesland)")
-    get_cdc_stations_per_state(spark)
-    print("b)")
-    b(scon, spark)
-    print("Beispielabfrage: (Alle Daten für eine Station:)")
-    get_hourly_station(spark, "4271")
-    print("Beispielabfrage: (Durchschnittliche Temperatur pro Tag für eine Station:)")
-    avg_temp_per_day(spark, "4271")
+    import_produkt_files(spark, scon)
+    read_product_data_from_parquet(spark)
 
 if __name__ == "__main__":
     main(scon, spark)
